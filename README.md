@@ -94,6 +94,19 @@ picture detection), then running `./build.sh` and committing the regenerated
 `index.html` and assets. Every push to `main` republishes the site through the
 workflow in `.github/workflows/pages.yml`.
 
+Two helpers make that a one-liner:
+
+```sh
+./tools/publish.sh "Fix the lipstick chart"   # sync the built site, commit, push
+./tools/install-hooks.sh                      # once per clone: push every commit
+```
+
+`publish.sh` copies the newest build out of a sibling `bobbi_work/site`
+directory when one exists, so the published page always matches the latest
+build. `install-hooks.sh` adds a `post-commit` hook, so after that a plain
+`git commit` is enough: the hook pushes, the workflow deploys, and a failed
+push only prints a warning instead of blocking the commit.
+
 ## Rights
 
 The text and images belong to Bobbi Brown and the original publisher; they are
