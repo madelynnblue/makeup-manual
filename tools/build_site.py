@@ -891,6 +891,144 @@ table.chart tbody tr:last-child td { border-bottom: 0; }
 }
 """
 
+SERVICE_WORKER = """
+/* Offline reading.
+ *
+ * The browser installs this worker the first time the page is opened from a
+ * secure origin, then serves the shell and anything already viewed from cache
+ * when the network is unavailable. Deploys are picked up because the page, the
+ * stylesheet and the script are all revalidated or versioned.
+ */
+
+const VERSION = 'v1';
+const CACHE_VERSION = 'makeup-manual-' + VERSION;
+const SHELL = ['./', './index.html', './assets/book.css', './assets/book.js'];
+const PICTURE = new RegExp('/assets/(?:images|pages)/');
+
+self.addEventListener('install', (event) => {
+  event.waitUntil((async () => {
+    const cache = await caches.open(CACHE_VERSION);
+    // cache entries individually: one missing file must not fail the install
+    await Promise.all(SHELL.map(async (url) => {
+      try {
+        const response = await fetch(url, { cache: 'reload' });
+        if (response && response.ok) await cache.put(url, response);
+      } catch (error) {
+        /* offline during install: the runtime handler will fill this in later */
+      }
+    }));
+    await self.skipWaiting();
+  })());
+});
+
+self.addEventListener('activate', (event) => {
+  event.waitUntil((async () => {
+    const names = await caches.keys();
+    await Promise.all(
+      names.filter((name) => name.startsWith('makeup-manual-') && name !== CACHE_VERSION)
+           .map((name) => caches.delete(name))
+    );
+    await self.clients.claim();
+  })());
+});
+
+self.addEventListener('fetch', (event) => {
+  const request = event.request;
+  if (request.method !== 'GET') return;
+
+  const url = new URL(request.url);
+  if (url.origin !== self.location.origin) return;
+
+  // pictures are cached once seen, so a second visit and any later offline
+  // visit are served without touching the network
+  if (PICTURE.test(url.pathname)) {
+    event.respondWith(cacheFirst(request));
+    return;
+  }
+
+  if (request.mode === 'navigate') {
+    event.respondWith(networkFirst(request));
+    return;
+  }
+
+  event.respondWith(cacheFirst(request));
+});
+
+async function cacheFirst(request) {
+  const cache = await caches.open(CACHE_VERSION);
+  const hit = await cache.match(request, { ignoreSearch: false });
+  if (hit) return hit;
+  try {
+    const response = await fetch(request);
+    if (response && response.ok && response.type === 'basic') {
+      cache.put(request, response.clone());
+    }
+    return response;
+  } catch (error) {
+    const fallback = await cache.match(request, { ignoreSearch: true });
+    if (fallback) return fallback;
+    throw error;
+  }
+}
+
+async function networkFirst(request) {
+  const cache = await caches.open(CACHE_VERSION);
+  try {
+    const response = await fetch(request);
+    if (response && response.ok) cache.put(request, response.clone());
+    return response;
+  } catch (error) {
+    return (await cache.match(request)) || (await cache.match('./index.html')) ||
+           (await cache.match('./')) || Response.error();
+  }
+}
+
+/* Deliberate whole-book save. The page reports progress through the worker's
+   postMessage channel, so a partial save can be resumed by asking again. */
+async function saveAll(client) {
+  const cache = await caches.open(CACHE_VERSION);
+  const response = await fetch('./index.html');
+  const html = await response.text();
+  const urls = Array.from(new Set(
+    (html.match(new RegExp('assets/(?:images|pages)/[A-Za-z0-9_.-]+[.]jpg', 'g')) || []).map((u) => './' + u)
+  ));
+
+  let done = 0, failed = 0;
+  const total = urls.length;
+  const report = () => client && client.postMessage({ type: 'save-progress', done, total, failed });
+
+  const queue = urls.slice();
+  const workers = Array.from({ length: 4 }, async () => {
+    while (queue.length) {
+      const url = queue.shift();
+      if (await cache.match(url)) { done += 1; continue; }
+      try {
+        const picture = await fetch(url);
+        if (picture && picture.ok) await cache.put(url, picture);
+        else failed += 1;
+      } catch (error) {
+        failed += 1;
+      }
+      done += 1;
+      if (done % 10 === 0) report();
+    }
+  });
+  await Promise.all(workers);
+  report();
+  if (client) client.postMessage({ type: 'save-done', done, total, failed });
+}
+
+self.addEventListener('message', (event) => {
+  const data = event.data;
+  if (data === 'clear') {
+    event.waitUntil(caches.delete(CACHE_VERSION));
+  } else if (data === 'save-all') {
+    event.waitUntil(saveAll(event.source));
+  }
+});
+"""
+
+
 JS = """
 (function () {
   /* The colour theme is pure CSS: it follows the reader's system setting, so
@@ -958,6 +1096,45 @@ JS = """
       document.querySelectorAll('nav.toc a').forEach(function (link) {
         var match = !query || link.textContent.toLowerCase().indexOf(query) !== -1;
         link.style.display = match ? '' : 'none';
+      });
+    });
+  }
+
+  /* ------------------------------------------------ offline availability */
+  var saveButton = document.querySelector('[data-save-offline]');
+  if (saveButton) {
+    saveButton.addEventListener('click', function () {
+      var worker = navigator.serviceWorker && navigator.serviceWorker.controller;
+      if (!worker) {
+        saveButton.textContent = 'Open over http(s) to save';
+        return;
+      }
+      saveButton.disabled = true;
+      saveButton.textContent = 'Saving\u2026';
+      worker.postMessage('save-all');
+    });
+  }
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.addEventListener('message', function (event) {
+      var data = event.data || {};
+      if (!saveButton) return;
+      if (data.type === 'save-progress') {
+        saveButton.textContent = 'Saving ' + Math.round((data.done / data.total) * 100) + '%';
+      } else if (data.type === 'save-done') {
+        saveButton.disabled = false;
+        saveButton.textContent = data.failed
+          ? 'Saved ' + (data.total - data.failed) + ' of ' + data.total + ' \u2014 retry'
+          : 'Saved for offline';
+      }
+    });
+  }
+
+  // A service worker has to come from a secure origin, so this quietly does
+  // nothing when the page is opened straight from disk.
+  if ('serviceWorker' in navigator && location.protocol.indexOf('http') === 0) {
+    window.addEventListener('load', function () {
+      navigator.serviceWorker.register('sw.js').catch(function () {
+        /* offline reading is a bonus: failing to install is not an error */
       });
     });
   }
@@ -1122,6 +1299,51 @@ def figure_groups(page: dict) -> list[tuple[float, str]]:
     ]
 
 
+def build_offline_copy(
+    document: str, out_dir: str, css_path: str, js_path: str, image_roots: list[str]
+) -> tuple[str, int]:
+    """Write a single self-contained HTML file with every asset inlined.
+
+    The result needs no network and no neighbouring files, so it survives being
+    copied to another machine, a USB stick or an e-reader.
+    """
+    import base64
+
+    def data_uri(path: str) -> str:
+        with open(path, "rb") as fh:
+            return "data:image/jpeg;base64," + base64.b64encode(fh.read()).decode("ascii")
+
+    with open(css_path, encoding="utf-8") as fh:
+        css = fh.read()
+    with open(js_path, encoding="utf-8") as fh:
+        script = fh.read()
+
+    embedded = 0
+    for relative in sorted(set(re.findall(r"assets/(?:images|pages)/[\w.\-]+\.jpg", document))):
+        source = next(
+            (os.path.join(root, relative) for root in image_roots
+             if os.path.exists(os.path.join(root, relative))),
+            None,
+        )
+        if source is None:
+            continue
+        document = document.replace(relative, data_uri(source))
+        embedded += 1
+
+    document = document.replace(
+        f'<link rel="stylesheet" href="assets/book.css?v={_digest(css_path)}">',
+        "<style>\n" + css + "\n</style>",
+    ).replace(
+        f'<script src="assets/book.js?v={_digest(js_path)}"></script>',
+        "<script>\n" + script + "\n</script>",
+    )
+
+    offline_path = os.path.join(out_dir, "offline.html")
+    with open(offline_path, "w", encoding="utf-8") as fh:
+        fh.write(document)
+    return offline_path, embedded
+
+
 def main() -> None:
     pages = load_pages()
     clf = Classifier(pages)
@@ -1248,6 +1470,7 @@ def main() -> None:
     <div class="sidebar-tools" id="sidebar-tools">
       <div class="toc-tools">
         <button type="button" data-toggle-pages aria-pressed="false">Show original pages</button>
+        <button type="button" data-save-offline>Save for offline</button>
         <button type="button" onclick="window.print()">Print</button>
       </div>
       <input class="search" type="search" placeholder="Filter chapters&hellip;" aria-label="Filter chapters">
@@ -1276,6 +1499,8 @@ def main() -> None:
         fh.write(CSS)
     with open(js_path, "w", encoding="utf-8") as fh:
         fh.write(JS)
+    with open(os.path.join(OUT_DIR, "sw.js"), "w", encoding="utf-8") as fh:
+        fh.write(SERVICE_WORKER)
 
     # cache-bust: the fingerprint changes whenever the asset does
     document = document.replace(
@@ -1286,6 +1511,19 @@ def main() -> None:
 
     with open(os.path.join(OUT_DIR, "index.html"), "w", encoding="utf-8") as fh:
         fh.write(document)
+
+    if "--offline" in sys.argv or os.environ.get("OFFLINE"):
+        roots = [
+            OUT_DIR,
+            os.path.join(os.path.dirname(JSON_DIR), ""),
+            os.path.join(REPO, "work", ""),
+            os.path.join(REPO, ""),
+        ]
+        offline_path, embedded = build_offline_copy(
+            document, OUT_DIR, css_path, js_path, [r for r in roots if r]
+        )
+        size_mb = os.path.getsize(offline_path) / (1024 * 1024)
+        print(f"wrote {offline_path} ({size_mb:.0f} MB, {embedded} images embedded)")
 
     chapters = [e for e in entries if e["kind"] == "chapter"]
     parts = [e for e in entries if e["kind"] == "part"]

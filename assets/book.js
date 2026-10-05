@@ -69,6 +69,45 @@
     });
   }
 
+  /* ------------------------------------------------ offline availability */
+  var saveButton = document.querySelector('[data-save-offline]');
+  if (saveButton) {
+    saveButton.addEventListener('click', function () {
+      var worker = navigator.serviceWorker && navigator.serviceWorker.controller;
+      if (!worker) {
+        saveButton.textContent = 'Open over http(s) to save';
+        return;
+      }
+      saveButton.disabled = true;
+      saveButton.textContent = 'Saving…';
+      worker.postMessage('save-all');
+    });
+  }
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.addEventListener('message', function (event) {
+      var data = event.data || {};
+      if (!saveButton) return;
+      if (data.type === 'save-progress') {
+        saveButton.textContent = 'Saving ' + Math.round((data.done / data.total) * 100) + '%';
+      } else if (data.type === 'save-done') {
+        saveButton.disabled = false;
+        saveButton.textContent = data.failed
+          ? 'Saved ' + (data.total - data.failed) + ' of ' + data.total + ' — retry'
+          : 'Saved for offline';
+      }
+    });
+  }
+
+  // A service worker has to come from a secure origin, so this quietly does
+  // nothing when the page is opened straight from disk.
+  if ('serviceWorker' in navigator && location.protocol.indexOf('http') === 0) {
+    window.addEventListener('load', function () {
+      navigator.serviceWorker.register('sw.js').catch(function () {
+        /* offline reading is a bonus: failing to install is not an error */
+      });
+    });
+  }
+
   /* --------------------------------------------------- page facsimiles */
   var toggle = document.querySelector('[data-toggle-pages]');
   if (toggle) {

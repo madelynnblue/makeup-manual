@@ -8,6 +8,8 @@
 #   2. compile the Swift page scanner (Vision OCR + picture detection)
 #   3. scan all pages in parallel -> work/json/NNN.json + work/images
 #   4. assemble ./index.html, ./assets/book.css, ./assets/book.js
+#   5. sw.js is generated alongside: the page installs it on first visit and
+#      can then be read offline (the "Save for offline" button caches the rest)
 #
 # The generated page is written to the repository root, which is exactly what
 # GitHub Pages publishes. Requires macOS (Vision/AppKit), poppler and Xcode
@@ -45,7 +47,7 @@ echo "==> copying page facsimiles"
 cp "$WORK"/pages/*.jpg assets/pages/
 
 echo "==> assembling HTML"
-OUT_DIR="$(mktemp -d)" python3 tools/build_site.py --json "$WORK/json" --out "$ROOT"
+python3 tools/build_site.py --json "$WORK/json" --out "$ROOT"
 
 echo "==> copying illustrations"
 cp "$WORK"/images/*.jpg assets/images/

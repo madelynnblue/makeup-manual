@@ -17,7 +17,8 @@ them.
 | --- | --- |
 | `index.html` | The whole book: 2 parts, 12 chapters, 383 headings, ~42,000 words |
 | `assets/book.css` | Reading styles: light and dark themes, mobile layout, print stylesheet |
-| `assets/book.js` | Contents drawer, lightbox, chapter filter |
+| `assets/book.js` | Contents drawer, lightbox, chapter filter, service worker registration |
+| `sw.js` | Service worker: makes the book readable offline |
 | `assets/images/` | 403 illustrations extracted from the scans |
 | `assets/pages/` | 156 page facsimiles of the original book |
 | `source.pdf` | The original scanned PDF the edition was built from |
@@ -45,6 +46,18 @@ them.
 * **Original page facsimiles** are collapsed under each section so you can check
   the reflow against the scan. `Show original pages` opens them all for
   side-by-side comparison; `Print` leaves them out.
+
+## Offline reading
+
+The service worker only installs on a secure origin, so this works over
+`https://` and on `localhost` — not from a `file://` path, where the browser
+disables service workers. Opening the saved folder from disk still works as an
+ordinary local page; it simply does not cache itself.
+
+To inspect what has been stored, open DevTools → Application → Cache Storage and
+look for `makeup-manual-v1`. Removing that entry, or clearing site data, undoes
+the save. A new deployment invalidates the old cache automatically, because the
+stylesheets and scripts the page requests are versioned by content hash.
 
 ## Rebuilding
 
