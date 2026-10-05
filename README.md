@@ -38,7 +38,10 @@ them.
   with dictionary-checked de-hyphenation at line breaks.
 * **Structure.** Chapters, parts, headings, numbered step lists and six
   reference tables were recovered from the printed layout.
-* **Illustrations** sit beside the text; click any of them for a full-size view.
+* **Illustrations appear inline with the text that describes them**, placed by
+  their position on the original page rather than collected at the end of it, so
+  each brush, step photo or swatch sits under its own heading. Click any of them
+  for a full-size view.
 * **Original page facsimiles** are collapsed under each section so you can check
   the reflow against the scan. `Show original pages` opens them all for
   side-by-side comparison; `Print` leaves them out.

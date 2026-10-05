@@ -985,66 +985,95 @@ JS = """
 """
 
 
-def render_blocks(blocks: list[Block], skip_labels: set[str], title: str = "") -> list[str]:
-    """Render page blocks, dropping the printed "Chapter N"/repeat-title labels."""
+def _render_items(
+    items: list[tuple[Block | None, list[str]]], skip_labels: set[str], title: str
+) -> list[str]:
+    """Render (block, markup) pairs, keeping lists open across entries.
+
+    A picture that falls in the middle of a numbered list must not restart the
+    numbering, so list state is carried across the whole sequence. A picture
+    also closes an open list, since it is not part of it.
+    """
     parts: list[str] = []
-    open_list = False
+    open_list: str | None = None
     title_key = re.sub(r"[^a-z]", "", title.lower())
 
     def close_list() -> None:
         nonlocal open_list
-        if open_list:
+        if open_list is not None:
             parts.append("</ol>")
-            open_list = False
+            open_list = None
 
-    for block in blocks:
-        # the chapter/part label is recreated by the section header
-        if block.kind in ("chapter", "part"):
+    for block, markup in items:
+        if block is not None and block.kind in ("chapter", "part"):
             continue
-        if block.kind == "heading" and title_key:
+        # the title printed under "Chapter N" repeats the chapter heading
+        if block is not None and block.kind == "heading" and title_key:
             if re.sub(r"[^a-z]", "", block.text.lower()) == title_key:
                 continue
-        if block.kind == "heading":
-            close_list()
-            tag = "h3" if block.level <= 3 else "h4"
-            parts.append(f"<{tag}>{render_inline(block.text)}</{tag}>")
-            continue
-        if block.kind == "table":
-            close_list()
-            try:
-                rows = json.loads(block.text)
-            except (ValueError, TypeError):
-                rows = []
-            if rows:
-                head = "".join(f"<th>{render_inline(c)}</th>" for c in rows[0])
-                body_rows = "".join(
-                    "<tr>" + "".join(f"<td>{render_inline(c)}</td>" for c in row) + "</tr>"
-                    for row in rows[1:]
-                )
-                parts.append(
-                    f'<div class="table-scroll"><table class="chart">'
-                    f'<thead><tr>{head}</tr></thead><tbody>{body_rows}</tbody></table></div>'
-                )
-            continue
-        if block.kind in ("list", "bullet"):
-            tag = "steps" if block.kind == "list" else "plain"
-            if not open_list:
-                parts.append(f'<ol class="{tag}">')
-                open_list = True
+
+        if block is not None and block.kind in ("list", "bullet"):
+            wanted = "steps" if block.kind == "list" else "plain"
+            if open_list != wanted:
+                close_list()
+                parts.append(f'<ol class="{wanted}">')
+                open_list = wanted
             parts.append(f"<li>{render_inline(block.text)}</li>")
             continue
+
         close_list()
-        parts.append(f"<p>{render_inline(block.text)}</p>")
+        if markup:
+            parts.extend(markup)
+
     close_list()
     return parts
 
 
-def render_figures(page: dict) -> list[str]:
-    number = page["page"]
-    if not page["regions"]:
+def block_markup(block: Block, skip_labels: set[str], title: str) -> list[str]:
+    """Markup for a non-list block; list items are emitted by _render_items."""
+    if block.kind == "table":
+        try:
+            rows = json.loads(block.text)
+        except (ValueError, TypeError):
+            rows = []
+        if not rows:
+            return []
+        head = "".join(f"<th>{render_inline(c)}</th>" for c in rows[0])
+        body_rows = "".join(
+            "<tr>" + "".join(f"<td>{render_inline(c)}</td>" for c in row) + "</tr>"
+            for row in rows[1:]
+        )
+        return [
+            f'<div class="table-scroll"><table class="chart">'
+            f'<thead><tr>{head}</tr></thead><tbody>{body_rows}</tbody></table></div>'
+        ]
+    if block.kind == "heading":
+        tag = "h3" if block.level <= 3 else "h4"
+        return [f"<{tag}>{render_inline(block.text)}</{tag}>"]
+    if block.kind in ("list", "bullet", "chapter", "part"):
         return []
+    return [f"<p>{render_inline(block.text)}</p>"]
+
+
+def render_page_blocks(
+    blocks: list[Block], groups: list[tuple[float, str]], skip_labels: set[str], title: str = ""
+) -> list[str]:
+    """Render text with each picture placed just after the text it follows."""
+    items: list[tuple[Block | None, list[str]]] = []
+    pending = list(groups)
+    for block in blocks:
+        while pending and pending[0][0] <= block.y:
+            items.append((None, [pending.pop(0)[1]]))
+        items.append((block, block_markup(block, skip_labels, title)))
+    for _, markup in pending:
+        items.append((None, [markup]))
+    return _render_items(items, skip_labels, title)
+
+
+def render_figure_group(regions: list[dict], page_number: int) -> str:
+    """One row of pictures, laid out side by side."""
     figures = []
-    for region in page["regions"]:
+    for region in regions:
         name = region["file"]
         display = min(int(region["px"]), 400)
         caption = "Colour swatch" if region.get("pad") else ""
@@ -1054,11 +1083,43 @@ def render_figures(page: dict) -> list[str]:
                 cls="pad" if region.get("pad") else "",
                 name=name,
                 w=display,
-                alt=caption or f"Illustration from page {number}",
+                alt=caption or f"Illustration from page {page_number}",
                 cap=f"<figcaption>{caption}</figcaption>" if caption else "",
             )
         )
-    return ['<div class="figures">' + "".join(figures) + "</div>"]
+    return '<div class="figures">' + "".join(figures) + "</div>"
+
+
+def figure_groups(page: dict) -> list[tuple[float, str]]:
+    """Pictures on a page, grouped into rows, each with its top position.
+
+    The vertical position is what lets a picture be placed next to the text
+    that describes it instead of at the foot of the page.
+    """
+    regions = page["regions"]
+    if not regions:
+        return []
+    ordered = sorted(regions, key=lambda r: (r["y"], r["x"]))
+    tolerance = 0.012
+
+    rows: list[list[dict]] = []
+    for region in ordered:
+        if rows:
+            reference = rows[-1][0]
+            same_row = abs(region["y"] - reference["y"]) < tolerance
+            shares_column = (
+                region["x"] < reference["x"] + reference["w"]
+                and reference["x"] < region["x"] + region["w"]
+            )
+            if same_row and shares_column:
+                rows[-1].append(region)
+                continue
+        rows.append([region])
+
+    return [
+        (min(r["y"] for r in row), render_figure_group(row, page["page"]))
+        for row in rows
+    ]
 
 
 def main() -> None:
@@ -1141,14 +1202,15 @@ def main() -> None:
         for entry in openings:
             if entry["kind"] == "chapter":
                 page_title = entry["title"]
-        body_parts.extend(render_blocks(blocks, skip_labels, page_title))
+        body_parts.extend(
+            render_page_blocks(blocks, figure_groups(page), skip_labels, page_title)
+        )
 
         carry = None
         if blocks and not openings:
             last = blocks[-1]
             if last.kind == "p" and not ends_sentence(last.text):
                 carry = last
-        body_parts.extend(render_figures(page))
         body_parts.append(
             f'<details class="page-facsimile"><summary>Original page {number} of the scan</summary>'
             f'<img src="assets/pages/page-{number:03d}.jpg" loading="lazy" alt="Scanned page {number}"></details>'
