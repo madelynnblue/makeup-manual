@@ -814,7 +814,7 @@ table.chart tbody tr:last-child td { border-bottom: 0; }
 .page-facsimile summary { list-style: none; }
 .page-facsimile summary::-webkit-details-marker { display: none; }
 .page-facsimile summary::before {
-  content: "\25B8"; display: inline-block; width: 1.1em; color: var(--accent);
+  content: "▸"; display: inline-block; width: 1.1em; color: var(--accent);
   transition: transform .15s ease;
 }
 .page-facsimile[open] summary::before { transform: rotate(90deg); }
