@@ -810,8 +810,15 @@ table.chart tbody tr:last-child td { border-bottom: 0; }
   display: block; width: 100%; max-width: 900px; margin-top: 10px;
   border: 1px solid var(--art-border); border-radius: 4px;
 }
-body:not(.show-facsimiles) .page-facsimile img { display: none; }
-body.show-facsimiles .page-facsimile img { display: block; }
+/* The summary marker is removed elsewhere, so draw our own affordance. */
+.page-facsimile summary { list-style: none; }
+.page-facsimile summary::-webkit-details-marker { display: none; }
+.page-facsimile summary::before {
+  content: "\25B8"; display: inline-block; width: 1.1em; color: var(--accent);
+  transition: transform .15s ease;
+}
+.page-facsimile[open] summary::before { transform: rotate(90deg); }
+.page-facsimile[open] summary { color: var(--ink); }
 .lightbox {
   position: fixed; inset: 0; background: var(--overlay); display: none;
   align-items: center; justify-content: center; padding: 24px; z-index: 50; cursor: zoom-out;
@@ -953,15 +960,18 @@ JS = """
   if (toggle) {
     var show = false;
     try { show = localStorage.getItem('showFacsimiles') === '1'; } catch (error) { /* ignore */ }
+    var facsimiles = document.querySelectorAll('details.page-facsimile');
     var applyPages = function (on) {
-      document.body.classList.toggle('show-facsimiles', on);
+      facsimiles.forEach(function (details) { details.open = on; });
       toggle.setAttribute('aria-pressed', on ? 'true' : 'false');
       toggle.textContent = on ? 'Hide original pages' : 'Show original pages';
       try { localStorage.setItem('showFacsimiles', on ? '1' : '0'); } catch (error) { /* ignore */ }
     };
-    applyPages(show);
+    // restore the remembered state; each summary still toggles on its own
+    if (show) applyPages(true);
     toggle.addEventListener('click', function () {
-      applyPages(!document.body.classList.contains('show-facsimiles'));
+      var currentlyOpen = document.querySelectorAll('details.page-facsimile[open]').length;
+      applyPages(currentlyOpen < facsimiles.length);
     });
   }
 })();

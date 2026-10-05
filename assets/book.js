@@ -74,15 +74,18 @@
   if (toggle) {
     var show = false;
     try { show = localStorage.getItem('showFacsimiles') === '1'; } catch (error) { /* ignore */ }
+    var facsimiles = document.querySelectorAll('details.page-facsimile');
     var applyPages = function (on) {
-      document.body.classList.toggle('show-facsimiles', on);
+      facsimiles.forEach(function (details) { details.open = on; });
       toggle.setAttribute('aria-pressed', on ? 'true' : 'false');
       toggle.textContent = on ? 'Hide original pages' : 'Show original pages';
       try { localStorage.setItem('showFacsimiles', on ? '1' : '0'); } catch (error) { /* ignore */ }
     };
-    applyPages(show);
+    // restore the remembered state; each summary still toggles on its own
+    if (show) applyPages(true);
     toggle.addEventListener('click', function () {
-      applyPages(!document.body.classList.contains('show-facsimiles'));
+      var currentlyOpen = document.querySelectorAll('details.page-facsimile[open]').length;
+      applyPages(currentlyOpen < facsimiles.length);
     });
   }
 })();
