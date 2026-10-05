@@ -9,17 +9,6 @@
 <meta name="theme-color" content="#1a171a" media="(prefers-color-scheme: dark)">
 <title>Bobbi Brown Makeup Manual &mdash; readable edition</title>
 <link rel="stylesheet" href="assets/book.css">
-<script>
-/* Set the colour theme before first paint so there is no flash. */
-(function () {
-  var preference = 'auto';
-  try { preference = localStorage.getItem('theme') || 'auto'; } catch (error) {}
-  var dark = preference === 'dark' ||
-    (preference === 'auto' && window.matchMedia('(prefers-color-scheme: dark)').matches);
-  document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
-  document.documentElement.setAttribute('data-theme-preference', preference);
-})();
-</script>
 </head>
 <body>
 <div class="layout">
@@ -34,9 +23,6 @@
     <p class="subtitle">Readable edition &middot; text reflowed from the scanned book</p>
     <div class="sidebar-tools" id="sidebar-tools">
       <div class="toc-tools">
-        <button type="button" data-theme-toggle aria-pressed="false" data-next="light">
-          Theme: <span data-theme-label>Light</span>
-        </button>
         <button type="button" data-toggle-pages aria-pressed="false">Show original pages</button>
         <button type="button" onclick="window.print()">Print</button>
       </div>

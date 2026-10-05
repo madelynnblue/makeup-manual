@@ -1,45 +1,7 @@
 
 (function () {
-  var root = document.documentElement;
-  var light = window.matchMedia('(prefers-color-scheme: light)');
-
-  /* ------------------------------------------------------------ theme */
-  function resolved(preference) {
-    return preference === 'auto' ? (light.matches ? 'light' : 'dark') : preference;
-  }
-
-  function apply(preference) {
-    root.setAttribute('data-theme', resolved(preference));
-    var button = document.querySelector('[data-theme-toggle]');
-    if (button) {
-      var order = preference === 'auto' ? 'light' : preference === 'light' ? 'dark' : 'auto';
-      button.setAttribute('data-next', order);
-      var label = button.querySelector('[data-theme-label]');
-      if (label) label.textContent = order.charAt(0).toUpperCase() + order.slice(1);
-      button.setAttribute('aria-label', 'Colour theme: ' + preference + '. Switch to ' + order + '.');
-      button.setAttribute('aria-pressed', preference === 'dark' ? 'true' : 'false');
-    }
-  }
-
-  function stored() {
-    try { return localStorage.getItem('theme') || 'auto'; } catch (error) { return 'auto'; }
-  }
-
-  apply(stored());
-
-  // follow the system only while the preference is automatic
-  var onSystemChange = function () { if (stored() === 'auto') apply('auto'); };
-  if (light.addEventListener) light.addEventListener('change', onSystemChange);
-  else if (light.addListener) light.addListener(onSystemChange);
-
-  var themeButton = document.querySelector('[data-theme-toggle]');
-  if (themeButton) {
-    themeButton.addEventListener('click', function () {
-      var next = themeButton.getAttribute('data-next') || 'auto';
-      try { localStorage.setItem('theme', next); } catch (error) { /* private mode */ }
-      apply(next);
-    });
-  }
+  /* The colour theme is pure CSS: it follows the reader's system setting, so
+     there is nothing to store and nothing to toggle here. */
 
   /* -------------------------------------------------------- mobile nav */
   var sidebar = document.querySelector('.sidebar');

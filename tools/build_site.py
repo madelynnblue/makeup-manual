@@ -634,8 +634,30 @@ CSS = """
   --accent: #a01e52;
   --rule: #e4ddd3;
   --shadow: 0 12px 34px rgba(0, 0, 0, .22);
+  --shadow-soft: 0 20px 60px rgba(0, 0, 0, .5);
   --overlay: rgba(20, 16, 14, .9);
   --art-border: rgba(0, 0, 0, .16);
+}
+
+/* The colour theme follows the reader's operating system preference. Nothing
+   is stored and nothing is toggled: if the system switches, so does the page.
+   An explicit data-theme attribute on <html> is still honoured for any host
+   that wants to force a theme. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --paper: #121012;
+    --panel: #1a171a;
+    --panel-strong: #262228;
+    --ink: #ece7e3;
+    --muted: #a49a92;
+    --accent: #ff85ad;
+    --rule: #2e282e;
+    --shadow: 0 12px 34px rgba(0, 0, 0, .55);
+    --shadow-soft: 0 20px 60px rgba(0, 0, 0, .6);
+    --overlay: rgba(0, 0, 0, .92);
+    --art-border: rgba(255, 255, 255, .22);
+  }
 }
 :root[data-theme="dark"] {
   color-scheme: dark;
@@ -647,6 +669,7 @@ CSS = """
   --accent: #ff85ad;
   --rule: #2e282e;
   --shadow: 0 12px 34px rgba(0, 0, 0, .55);
+  --shadow-soft: 0 20px 60px rgba(0, 0, 0, .6);
   --overlay: rgba(0, 0, 0, .92);
   --art-border: rgba(255, 255, 255, .22);
 }
@@ -794,7 +817,7 @@ body.show-facsimiles .page-facsimile img { display: block; }
   align-items: center; justify-content: center; padding: 24px; z-index: 50; cursor: zoom-out;
 }
 .lightbox.open { display: flex; }
-.lightbox img { max-width: 96vw; max-height: 94vh; box-shadow: 0 20px 60px rgba(0, 0, 0, .5); }
+.lightbox img { max-width: 96vw; max-height: 94vh; box-shadow: var(--shadow-soft); }
 .backtotop {
   position: fixed; right: 20px; bottom: 20px; z-index: 40;
   background: var(--accent); color: var(--paper); border: 0;
@@ -856,46 +879,8 @@ body.show-facsimiles .page-facsimile img { display: block; }
 
 JS = """
 (function () {
-  var root = document.documentElement;
-  var light = window.matchMedia('(prefers-color-scheme: light)');
-
-  /* ------------------------------------------------------------ theme */
-  function resolved(preference) {
-    return preference === 'auto' ? (light.matches ? 'light' : 'dark') : preference;
-  }
-
-  function apply(preference) {
-    root.setAttribute('data-theme', resolved(preference));
-    var button = document.querySelector('[data-theme-toggle]');
-    if (button) {
-      var order = preference === 'auto' ? 'light' : preference === 'light' ? 'dark' : 'auto';
-      button.setAttribute('data-next', order);
-      var label = button.querySelector('[data-theme-label]');
-      if (label) label.textContent = order.charAt(0).toUpperCase() + order.slice(1);
-      button.setAttribute('aria-label', 'Colour theme: ' + preference + '. Switch to ' + order + '.');
-      button.setAttribute('aria-pressed', preference === 'dark' ? 'true' : 'false');
-    }
-  }
-
-  function stored() {
-    try { return localStorage.getItem('theme') || 'auto'; } catch (error) { return 'auto'; }
-  }
-
-  apply(stored());
-
-  // follow the system only while the preference is automatic
-  var onSystemChange = function () { if (stored() === 'auto') apply('auto'); };
-  if (light.addEventListener) light.addEventListener('change', onSystemChange);
-  else if (light.addListener) light.addListener(onSystemChange);
-
-  var themeButton = document.querySelector('[data-theme-toggle]');
-  if (themeButton) {
-    themeButton.addEventListener('click', function () {
-      var next = themeButton.getAttribute('data-next') || 'auto';
-      try { localStorage.setItem('theme', next); } catch (error) { /* private mode */ }
-      apply(next);
-    });
-  }
+  /* The colour theme is pure CSS: it follows the reader's system setting, so
+     there is nothing to store and nothing to toggle here. */
 
   /* -------------------------------------------------------- mobile nav */
   var sidebar = document.querySelector('.sidebar');
@@ -1169,17 +1154,6 @@ def main() -> None:
 <meta name="theme-color" content="#1a171a" media="(prefers-color-scheme: dark)">
 <title>Bobbi Brown Makeup Manual &mdash; readable edition</title>
 <link rel="stylesheet" href="assets/book.css">
-<script>
-/* Set the colour theme before first paint so there is no flash. */
-(function () {{
-  var preference = 'auto';
-  try {{ preference = localStorage.getItem('theme') || 'auto'; }} catch (error) {{}}
-  var dark = preference === 'dark' ||
-    (preference === 'auto' && window.matchMedia('(prefers-color-scheme: dark)').matches);
-  document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
-  document.documentElement.setAttribute('data-theme-preference', preference);
-}})();
-</script>
 </head>
 <body>
 <div class="layout">
@@ -1194,9 +1168,6 @@ def main() -> None:
     <p class="subtitle">Readable edition &middot; text reflowed from the scanned book</p>
     <div class="sidebar-tools" id="sidebar-tools">
       <div class="toc-tools">
-        <button type="button" data-theme-toggle aria-pressed="false" data-next="light">
-          Theme: <span data-theme-label>Light</span>
-        </button>
         <button type="button" data-toggle-pages aria-pressed="false">Show original pages</button>
         <button type="button" onclick="window.print()">Print</button>
       </div>

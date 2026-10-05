@@ -10,8 +10,30 @@
   --accent: #a01e52;
   --rule: #e4ddd3;
   --shadow: 0 12px 34px rgba(0, 0, 0, .22);
+  --shadow-soft: 0 20px 60px rgba(0, 0, 0, .5);
   --overlay: rgba(20, 16, 14, .9);
   --art-border: rgba(0, 0, 0, .16);
+}
+
+/* The colour theme follows the reader's operating system preference. Nothing
+   is stored and nothing is toggled: if the system switches, so does the page.
+   An explicit data-theme attribute on <html> is still honoured for any host
+   that wants to force a theme. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --paper: #121012;
+    --panel: #1a171a;
+    --panel-strong: #262228;
+    --ink: #ece7e3;
+    --muted: #a49a92;
+    --accent: #ff85ad;
+    --rule: #2e282e;
+    --shadow: 0 12px 34px rgba(0, 0, 0, .55);
+    --shadow-soft: 0 20px 60px rgba(0, 0, 0, .6);
+    --overlay: rgba(0, 0, 0, .92);
+    --art-border: rgba(255, 255, 255, .22);
+  }
 }
 :root[data-theme="dark"] {
   color-scheme: dark;
@@ -23,6 +45,7 @@
   --accent: #ff85ad;
   --rule: #2e282e;
   --shadow: 0 12px 34px rgba(0, 0, 0, .55);
+  --shadow-soft: 0 20px 60px rgba(0, 0, 0, .6);
   --overlay: rgba(0, 0, 0, .92);
   --art-border: rgba(255, 255, 255, .22);
 }
@@ -170,7 +193,7 @@ body.show-facsimiles .page-facsimile img { display: block; }
   align-items: center; justify-content: center; padding: 24px; z-index: 50; cursor: zoom-out;
 }
 .lightbox.open { display: flex; }
-.lightbox img { max-width: 96vw; max-height: 94vh; box-shadow: 0 20px 60px rgba(0, 0, 0, .5); }
+.lightbox img { max-width: 96vw; max-height: 94vh; box-shadow: var(--shadow-soft); }
 .backtotop {
   position: fixed; right: 20px; bottom: 20px; z-index: 40;
   background: var(--accent); color: var(--paper); border: 0;

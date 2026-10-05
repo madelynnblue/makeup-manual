@@ -17,7 +17,7 @@ them.
 | --- | --- |
 | `index.html` | The whole book: 2 parts, 12 chapters, 383 headings, ~42,000 words |
 | `assets/book.css` | Reading styles: light and dark themes, mobile layout, print stylesheet |
-| `assets/book.js` | Theme switch, contents drawer, lightbox, chapter filter |
+| `assets/book.js` | Contents drawer, lightbox, chapter filter |
 | `assets/images/` | 403 illustrations extracted from the scans |
 | `assets/pages/` | 156 page facsimiles of the original book |
 | `source.pdf` | The original scanned PDF the edition was built from |
@@ -26,8 +26,11 @@ them.
 
 ## Reading features
 
-* **Light and dark themes.** Follows the system setting by default; the theme
-  button cycles Auto → Light → Dark and remembers your choice.
+* **Light and dark themes**, entirely in CSS. The page follows the reader's
+  operating-system colour preference through `prefers-color-scheme`, with no
+  JavaScript, no toggle and nothing stored — change the system setting and an
+  open page restyles itself. A host that needs to force one theme can set
+  `data-theme="light"` or `data-theme="dark"` on the `<html>` element.
 * **Mobile layout.** The contents and controls collapse into a drawer behind
   the header, images scale to the viewport, and touch targets meet the 44 px
   minimum.
