@@ -7,6 +7,7 @@ Output: index.html, assets/book.css, assets/book.js, assets/layout.json
 
 from __future__ import annotations
 
+import hashlib
 import html
 import json
 import os
@@ -608,6 +609,12 @@ def build_structure(pages: list[dict], clf: Classifier) -> dict:
     return {"entries": structure}
 
 
+def _digest(path: str) -> str:
+    """Short content hash used to version the stylesheet and script links."""
+    with open(path, "rb") as fh:
+        return hashlib.sha256(fh.read()).hexdigest()[:10]
+
+
 def normalise_space(text: str) -> str:
     text = re.sub(r"\s+", " ", text).strip()
     # OCR often leaves a space before punctuation
@@ -1200,12 +1207,23 @@ def main() -> None:
 </html>
 """
 
+    assets_dir = os.path.join(OUT_DIR, "assets")
+    css_path = os.path.join(assets_dir, "book.css")
+    js_path = os.path.join(assets_dir, "book.js")
+    with open(css_path, "w", encoding="utf-8") as fh:
+        fh.write(CSS)
+    with open(js_path, "w", encoding="utf-8") as fh:
+        fh.write(JS)
+
+    # cache-bust: the fingerprint changes whenever the asset does
+    document = document.replace(
+        'href="assets/book.css"', f'href="assets/book.css?v={_digest(css_path)}"'
+    ).replace(
+        'src="assets/book.js"', f'src="assets/book.js?v={_digest(js_path)}"'
+    )
+
     with open(os.path.join(OUT_DIR, "index.html"), "w", encoding="utf-8") as fh:
         fh.write(document)
-    with open(os.path.join(OUT_DIR, "assets", "book.css"), "w", encoding="utf-8") as fh:
-        fh.write(CSS)
-    with open(os.path.join(OUT_DIR, "assets", "book.js"), "w", encoding="utf-8") as fh:
-        fh.write(JS)
 
     chapters = [e for e in entries if e["kind"] == "chapter"]
     parts = [e for e in entries if e["kind"] == "part"]
