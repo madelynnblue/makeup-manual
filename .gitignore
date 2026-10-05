@@ -1,0 +1,6 @@
+# build scratch
+work/
+site/
+
+# macOS
+.DS_Store
